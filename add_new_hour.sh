@@ -1,0 +1,1 @@
+echo "$(date +%D) - $(date +%T)" >> cron_jobs.txt
