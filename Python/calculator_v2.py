@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Calculator V2, very easy calculator."""
 first_arg, second_arg = int(input("Первое число: ")), int(input("Второе число: "))
 operations = int(input("Второе число: ")), input("Операция с этими числами(Доступны: + - * /) :")

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Calculator V1."""
 print(
     "Hi, this calculator works based on the command 'EVAL'\n"
@@ -9,4 +10,5 @@ while True:
         print(f'solution = {eval(input("Enter an expression to calculate in the format 1 + 1: "))}')
     except (ZeroDivisionError, NameError) as error:
         print('Calculator end work')
+        break
 # pylint calculator_v1.py - 8.33/10 W0123: Use of eval (eval-used)
