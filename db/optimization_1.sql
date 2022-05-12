@@ -1,0 +1,216 @@
+explain(analyse ,buffers)
+select user_id
+from users
+         inner join carts on carts.users_user_id = user_id
+         left join orders on carts.card_id = orders.carts_cart_id
+where orders.created_at between '2017-01-01' and now() and orders.carts_cart_id is not NULL
+order by orders.total desc, orders.updated_at desc;
+-- Sort  (cost=773.13..776.88 rows=1500 width=18) (actual time=4.286..4.426 rows=1500 loops=1)
+-- "  Sort Key: orders.total DESC, orders.updated_at DESC"
+--   Sort Method: quicksort  Memory: 166kB
+--   Buffers: shared hit=394
+--   ->  Hash Join  (cost=197.50..694.00 rows=1500 width=18) (actual time=1.848..3.642 rows=1500 loops=1)
+--         Hash Cond: (users.user_id = carts.users_user_id)
+--         Buffers: shared hit=394
+--         ->  Seq Scan on users  (cost=0.00..444.00 rows=10000 width=4) (actual time=0.005..0.662 rows=10000 loops=1)
+--               Buffers: shared hit=344
+--         ->  Hash  (cost=178.75..178.75 rows=1500 width=18) (actual time=1.837..1.841 rows=1500 loops=1)
+--               Buckets: 2048  Batches: 1  Memory Usage: 99kB
+--               Buffers: shared hit=50
+--               ->  Hash Join  (cost=58.00..178.75 rows=1500 width=18) (actual time=0.569..1.630 rows=1500 loops=1)
+--                     Hash Cond: (carts.card_id = orders.carts_cart_id)
+--                     Buffers: shared hit=50
+--                     ->  Seq Scan on carts  (cost=0.00..87.00 rows=5000 width=8) (actual time=0.002..0.283 rows=5000 loops=1)
+--                           Buffers: shared hit=37
+--                     ->  Hash  (cost=39.25..39.25 rows=1500 width=18) (actual time=0.563..0.565 rows=1500 loops=1)
+--                           Buckets: 2048  Batches: 1  Memory Usage: 93kB
+--                           Buffers: shared hit=13
+--                           ->  Seq Scan on orders  (cost=0.00..39.25 rows=1500 width=18) (actual time=0.004..0.317 rows=1500 loops=1)
+--                                 Filter: ((carts_cart_id IS NOT NULL) AND (created_at >= '2017-01-01 00:00:00'::timestamp without time zone) AND (created_at <= now()))
+--                                 Buffers: shared hit=13
+-- Planning:
+--   Buffers: shared hit=11
+-- Planning Time: 0.255 ms
+-- Execution Time: 4.604 ms
+
+-- add index --
+create index on users (user_id);
+create index on carts (card_id);
+create index on orders (carts_cart_id);
+-- Sort  (cost=489.31..493.06 rows=1500 width=18) (actual time=3.579..3.697 rows=1500 loops=1)
+-- "  Sort Key: orders.total DESC, orders.updated_at DESC"
+--   Sort Method: quicksort  Memory: 166kB
+--   Buffers: shared hit=33 read=11
+--   ->  Merge Join  (cost=237.68..410.18 rows=1500 width=18) (actual time=2.259..3.177 rows=1500 loops=1)
+--         Merge Cond: (carts.users_user_id = users.user_id)
+--         Buffers: shared hit=33 read=11
+--         ->  Sort  (cost=237.39..241.14 rows=1500 width=18) (actual time=2.243..2.313 rows=1500 loops=1)
+--               Sort Key: carts.users_user_id
+--               Sort Method: quicksort  Memory: 166kB
+--               Buffers: shared hit=30 read=7
+--               ->  Merge Join  (cost=0.56..158.26 rows=1500 width=18) (actual time=0.021..2.001 rows=1500 loops=1)
+--                     Merge Cond: (carts.card_id = orders.carts_cart_id)
+--                     Buffers: shared hit=30 read=7
+--                     ->  Index Scan using carts_card_id_idx on carts  (cost=0.28..179.28 rows=5000 width=8) (actual time=0.007..0.642 rows=1501 loops=1)
+--                           Buffers: shared hit=14 read=4
+--                     ->  Index Scan using orders_carts_cart_id_idx on orders  (cost=0.28..81.78 rows=1500 width=18) (actual time=0.010..0.833 rows=1500 loops=1)
+--                           Index Cond: (carts_cart_id IS NOT NULL)
+--                           Filter: ((created_at >= '2017-01-01 00:00:00'::timestamp without time zone) AND (created_at <= now()))
+--                           Buffers: shared hit=16 read=3
+--         ->  Index Only Scan using users_user_id_idx on users  (cost=0.29..275.29 rows=10000 width=4) (actual time=0.014..0.527 rows=1500 loops=1)
+--               Heap Fetches: 0
+--               Buffers: shared hit=3 read=4
+-- Planning:
+--   Buffers: shared hit=62 read=10
+-- Planning Time: 2.682 ms
+-- Execution Time: 3.844 ms
+
+-- no index, work in 1mb
+set work_mem to '1MB';
+-- Sort  (cost=773.13..776.88 rows=1500 width=18) (actual time=4.027..4.102 rows=1500 loops=1)
+-- "  Sort Key: orders.total DESC, orders.updated_at DESC"
+--   Sort Method: quicksort  Memory: 166kB
+--   Buffers: shared hit=394
+--   ->  Hash Join  (cost=197.50..694.00 rows=1500 width=18) (actual time=1.681..3.647 rows=1500 loops=1)
+--         Hash Cond: (users.user_id = carts.users_user_id)
+--         Buffers: shared hit=394
+--         ->  Seq Scan on users  (cost=0.00..444.00 rows=10000 width=4) (actual time=0.005..0.782 rows=10000 loops=1)
+--               Buffers: shared hit=344
+--         ->  Hash  (cost=178.75..178.75 rows=1500 width=18) (actual time=1.671..1.672 rows=1500 loops=1)
+--               Buckets: 2048  Batches: 1  Memory Usage: 99kB
+--               Buffers: shared hit=50
+--               ->  Hash Join  (cost=58.00..178.75 rows=1500 width=18) (actual time=0.535..1.454 rows=1500 loops=1)
+--                     Hash Cond: (carts.card_id = orders.carts_cart_id)
+--                     Buffers: shared hit=50
+--                     ->  Seq Scan on carts  (cost=0.00..87.00 rows=5000 width=8) (actual time=0.002..0.276 rows=5000 loops=1)
+--                           Buffers: shared hit=37
+--                     ->  Hash  (cost=39.25..39.25 rows=1500 width=18) (actual time=0.529..0.530 rows=1500 loops=1)
+--                           Buckets: 2048  Batches: 1  Memory Usage: 93kB
+--                           Buffers: shared hit=13
+--                           ->  Seq Scan on orders  (cost=0.00..39.25 rows=1500 width=18) (actual time=0.004..0.321 rows=1500 loops=1)
+--                                 Filter: ((carts_cart_id IS NOT NULL) AND (created_at >= '2017-01-01 00:00:00'::timestamp without time zone) AND (created_at <= now()))
+--                                 Buffers: shared hit=13
+-- Planning:
+--   Buffers: shared hit=11
+-- Planning Time: 0.212 ms
+-- Execution Time: 4.259 ms
+
+-- index - yes, work in 1 mb --
+-- Sort  (cost=489.31..493.06 rows=1500 width=18) (actual time=2.505..2.573 rows=1500 loops=1)
+-- "  Sort Key: orders.total DESC, orders.updated_at DESC"
+--   Sort Method: quicksort  Memory: 166kB
+--   Buffers: shared hit=44
+--   ->  Merge Join  (cost=237.68..410.18 rows=1500 width=18) (actual time=1.386..2.104 rows=1500 loops=1)
+--         Merge Cond: (carts.users_user_id = users.user_id)
+--         Buffers: shared hit=44
+--         ->  Sort  (cost=237.39..241.14 rows=1500 width=18) (actual time=1.372..1.443 rows=1500 loops=1)
+--               Sort Key: carts.users_user_id
+--               Sort Method: quicksort  Memory: 166kB
+--               Buffers: shared hit=37
+--               ->  Merge Join  (cost=0.56..158.26 rows=1500 width=18) (actual time=0.023..1.123 rows=1500 loops=1)
+--                     Merge Cond: (carts.card_id = orders.carts_cart_id)
+--                     Buffers: shared hit=37
+--                     ->  Index Scan using carts_card_id_idx on carts  (cost=0.28..179.28 rows=5000 width=8) (actual time=0.010..0.209 rows=1501 loops=1)
+--                           Buffers: shared hit=18
+--                     ->  Index Scan using orders_carts_cart_id_idx on orders  (cost=0.28..81.78 rows=1500 width=18) (actual time=0.010..0.499 rows=1500 loops=1)
+--                           Index Cond: (carts_cart_id IS NOT NULL)
+--                           Filter: ((created_at >= '2017-01-01 00:00:00'::timestamp without time zone) AND (created_at <= now()))
+--                           Buffers: shared hit=19
+--         ->  Index Only Scan using users_user_id_idx on users  (cost=0.29..275.29 rows=10000 width=4) (actual time=0.011..0.291 rows=1500 loops=1)
+--               Heap Fetches: 0
+--               Buffers: shared hit=7
+-- Planning:
+--   Buffers: shared hit=15
+-- Planning Time: 0.425 ms
+-- Execution Time: 2.692 ms
+
+-- drop index --
+drop index users_user_id_idx;
+drop index carts_card_id_idx;
+drop index orders_carts_cart_id_idx;
+-- Sort  (cost=773.13..776.88 rows=1500 width=18) (actual time=3.771..3.833 rows=1500 loops=1)
+-- "  Sort Key: orders.total DESC, orders.updated_at DESC"
+--   Sort Method: quicksort  Memory: 166kB
+--   Buffers: shared hit=394
+--   ->  Hash Join  (cost=197.50..694.00 rows=1500 width=18) (actual time=1.689..3.392 rows=1500 loops=1)
+--         Hash Cond: (users.user_id = carts.users_user_id)
+--         Buffers: shared hit=394
+--         ->  Seq Scan on users  (cost=0.00..444.00 rows=10000 width=4) (actual time=0.004..0.643 rows=10000 loops=1)
+--               Buffers: shared hit=344
+--         ->  Hash  (cost=178.75..178.75 rows=1500 width=18) (actual time=1.681..1.682 rows=1500 loops=1)
+--               Buckets: 2048  Batches: 1  Memory Usage: 99kB
+--               Buffers: shared hit=50
+--               ->  Hash Join  (cost=58.00..178.75 rows=1500 width=18) (actual time=0.553..1.479 rows=1500 loops=1)
+--                     Hash Cond: (carts.card_id = orders.carts_cart_id)
+--                     Buffers: shared hit=50
+--                     ->  Seq Scan on carts  (cost=0.00..87.00 rows=5000 width=8) (actual time=0.002..0.279 rows=5000 loops=1)
+--                           Buffers: shared hit=37
+--                     ->  Hash  (cost=39.25..39.25 rows=1500 width=18) (actual time=0.548..0.548 rows=1500 loops=1)
+--                           Buckets: 2048  Batches: 1  Memory Usage: 93kB
+--                           Buffers: shared hit=13
+--                           ->  Seq Scan on orders  (cost=0.00..39.25 rows=1500 width=18) (actual time=0.004..0.331 rows=1500 loops=1)
+--                                 Filter: ((carts_cart_id IS NOT NULL) AND (created_at >= '2017-01-01 00:00:00'::timestamp without time zone) AND (created_at <= now()))
+--                                 Buffers: shared hit=13
+-- Planning:
+--   Buffers: shared hit=35 dirtied=1
+-- Planning Time: 0.434 ms
+-- Execution Time: 3.943 ms
+
+-- no index, work in 100 mb
+set work_mem to '100MB'
+-- Sort  (cost=773.13..776.88 rows=1500 width=18) (actual time=3.855..3.937 rows=1500 loops=1)
+-- "  Sort Key: orders.total DESC, orders.updated_at DESC"
+--   Sort Method: quicksort  Memory: 166kB
+--   Buffers: shared hit=394
+--   ->  Hash Join  (cost=197.50..694.00 rows=1500 width=18) (actual time=1.699..3.466 rows=1500 loops=1)
+--         Hash Cond: (users.user_id = carts.users_user_id)
+--         Buffers: shared hit=394
+--         ->  Seq Scan on users  (cost=0.00..444.00 rows=10000 width=4) (actual time=0.003..0.661 rows=10000 loops=1)
+--               Buffers: shared hit=344
+--         ->  Hash  (cost=178.75..178.75 rows=1500 width=18) (actual time=1.691..1.693 rows=1500 loops=1)
+--               Buckets: 2048  Batches: 1  Memory Usage: 99kB
+--               Buffers: shared hit=50
+--               ->  Hash Join  (cost=58.00..178.75 rows=1500 width=18) (actual time=0.543..1.456 rows=1500 loops=1)
+--                     Hash Cond: (carts.card_id = orders.carts_cart_id)
+--                     Buffers: shared hit=50
+--                     ->  Seq Scan on carts  (cost=0.00..87.00 rows=5000 width=8) (actual time=0.002..0.276 rows=5000 loops=1)
+--                           Buffers: shared hit=37
+--                     ->  Hash  (cost=39.25..39.25 rows=1500 width=18) (actual time=0.537..0.538 rows=1500 loops=1)
+--                           Buckets: 2048  Batches: 1  Memory Usage: 93kB
+--                           Buffers: shared hit=13
+--                           ->  Seq Scan on orders  (cost=0.00..39.25 rows=1500 width=18) (actual time=0.004..0.323 rows=1500 loops=1)
+--                                 Filter: ((carts_cart_id IS NOT NULL) AND (created_at >= '2017-01-01 00:00:00'::timestamp without time zone) AND (created_at <= now()))
+--                                 Buffers: shared hit=13
+-- Planning:
+--   Buffers: shared hit=35 dirtied=1
+-- Planning Time: 0.298 ms
+-- Execution Time: 4.044 ms
+
+-- index - yes, work in 100mb
+-- Sort  (cost=489.31..493.06 rows=1500 width=18) (actual time=2.231..2.289 rows=1500 loops=1)
+-- "  Sort Key: orders.total DESC, orders.updated_at DESC"
+--   Sort Method: quicksort  Memory: 166kB
+--   Buffers: shared hit=33 read=11
+--   ->  Merge Join  (cost=237.68..410.18 rows=1500 width=18) (actual time=1.276..1.855 rows=1500 loops=1)
+--         Merge Cond: (carts.users_user_id = users.user_id)
+--         Buffers: shared hit=33 read=11
+--         ->  Sort  (cost=237.39..241.14 rows=1500 width=18) (actual time=1.265..1.346 rows=1500 loops=1)
+--               Sort Key: carts.users_user_id
+--               Sort Method: quicksort  Memory: 166kB
+--               Buffers: shared hit=30 read=7
+--               ->  Merge Join  (cost=0.56..158.26 rows=1500 width=18) (actual time=0.015..1.045 rows=1500 loops=1)
+--                     Merge Cond: (carts.card_id = orders.carts_cart_id)
+--                     Buffers: shared hit=30 read=7
+--                     ->  Index Scan using carts_card_id_idx on carts  (cost=0.28..179.28 rows=5000 width=8) (actual time=0.006..0.234 rows=1501 loops=1)
+--                           Buffers: shared hit=14 read=4
+--                     ->  Index Scan using orders_carts_cart_id_idx on orders  (cost=0.28..81.78 rows=1500 width=18) (actual time=0.007..0.404 rows=1500 loops=1)
+--                           Index Cond: (carts_cart_id IS NOT NULL)
+--                           Filter: ((created_at >= '2017-01-01 00:00:00'::timestamp without time zone) AND (created_at <= now()))
+--                           Buffers: shared hit=16 read=3
+--         ->  Index Only Scan using users_user_id_idx on users  (cost=0.29..275.29 rows=10000 width=4) (actual time=0.009..0.174 rows=1500 loops=1)
+--               Heap Fetches: 0
+--               Buffers: shared hit=3 read=4
+-- Planning:
+--   Buffers: shared hit=62 read=10
+-- Planning Time: 0.884 ms
+-- Execution Time: 2.397 ms
